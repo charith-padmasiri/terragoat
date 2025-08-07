@@ -20,12 +20,90 @@ resource "azurerm_managed_disk" "example" {
   }
 }
 
+data "azurerm_client_config" "current" {}
+
+resource "azurerm_user_assigned_identity" "example" {
+  name                = "storage-identity-${var.environment}"
+  resource_group_name = azurerm_resource_group.example.name
+  location            = azurerm_resource_group.example.location
+}
+
+resource "azurerm_key_vault" "example" {
+  name                        = "kv-${var.environment}-${random_integer.rnd_int.result}"
+  location                    = azurerm_resource_group.example.location
+  resource_group_name         = azurerm_resource_group.example.name
+  enabled_for_disk_encryption = true
+  tenant_id                   = data.azurerm_client_config.current.tenant_id
+  soft_delete_retention_days  = 7
+  purge_protection_enabled    = false
+  sku_name                    = "standard"
+
+  access_policy {
+    tenant_id = data.azurerm_client_config.current.tenant_id
+    object_id = data.azurerm_client_config.current.object_id
+
+    key_permissions = [
+      "Get",
+      "Create",
+      "Delete",
+      "List",
+      "Restore",
+      "Recover",
+      "UnwrapKey",
+      "WrapKey",
+      "Purge",
+      "Encrypt",
+      "Decrypt",
+      "Sign",
+      "Verify",
+      "GetRotationPolicy",
+      "SetRotationPolicy"
+    ]
+  }
+
+  access_policy {
+    tenant_id = data.azurerm_client_config.current.tenant_id
+    object_id = azurerm_user_assigned_identity.example.principal_id
+
+    key_permissions = [
+      "Get",
+      "UnwrapKey",
+      "WrapKey"
+    ]
+  }
+}
+
+resource "azurerm_key_vault_key" "example" {
+  name         = "storage-encryption-key"
+  key_vault_id = azurerm_key_vault.example.id
+  key_type     = "RSA"
+  key_size     = 2048
+
+  key_opts = [
+    "decrypt",
+    "encrypt",
+    "sign",
+    "unwrapKey",
+    "verify",
+    "wrapKey",
+  ]
+
+  depends_on = [
+    azurerm_key_vault.example
+  ]
+}
+
 resource "azurerm_storage_account" "example" {
   name                     = "tgsa${var.environment}${random_integer.rnd_int.result}"
   resource_group_name      = azurerm_resource_group.example.name
   location                 = azurerm_resource_group.example.location
   account_tier             = "Standard"
   account_replication_type = "GRS"
+  
+  customer_managed_key {
+    key_vault_key_id          = azurerm_key_vault_key.example.id
+    user_assigned_identity_id = azurerm_user_assigned_identity.example.id
+  }
   queue_properties {
     logging {
       delete                = false
