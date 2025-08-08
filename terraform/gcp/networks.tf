@@ -16,12 +16,32 @@ resource "google_compute_subnetwork" "public-subnetwork" {
   }
 }
 
-resource "google_compute_firewall" "allow_all" {
+resource "google_compute_firewall" "allow_web" {
   name          = "terragoat-${var.environment}-firewall"
   network       = google_compute_network.vpc.id
   source_ranges = ["0.0.0.0/0"]
   allow {
     protocol = "tcp"
-    ports    = ["0-65535"]
+    ports    = ["80", "443"]
+  }
+}
+
+resource "google_compute_firewall" "allow_ssh_restricted" {
+  name          = "terragoat-${var.environment}-ssh"
+  network       = google_compute_network.vpc.id
+  source_ranges = ["10.0.0.0/8", "192.168.0.0/16", "172.16.0.0/12"]
+  allow {
+    protocol = "tcp"
+    ports    = ["22"]
+  }
+}
+
+resource "google_compute_firewall" "allow_rdp_restricted" {
+  name          = "terragoat-${var.environment}-rdp"
+  network       = google_compute_network.vpc.id
+  source_ranges = ["10.0.0.0/8", "192.168.0.0/16", "172.16.0.0/12"]
+  allow {
+    protocol = "tcp"
+    ports    = ["3389"]
   }
 }
